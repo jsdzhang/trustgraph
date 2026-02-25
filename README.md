@@ -132,7 +132,7 @@ A Context Core typically includes:
 - Context Graph (entities, relationships, supporting evidence)
 - Embeddings / vector indexes for fast semantic entry-point lookup
 - Source manifests + provenance (where facts came from, when, and how they were derived)
-- Retrieval policies (budgets, traversal rules, recency, authority ranking)
+- Retrieval policies (traversal rules, freshness, authority ranking)
 
 ## Tech Stack
 TrustGraph provides component flexibility to optimize agent workflows.
