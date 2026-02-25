@@ -28,7 +28,11 @@ The context backend:
   - [x] Images, video, and audio 
 - [x] Automated data ingest and loading
   - [x] Quick ingest with semantic similarity retrieval
-  - [x] Ontology structuring for precision retrieval    
+  - [x] Ontology structuring for precision retrieval
+- [x] Out-of-the-box RAG pipelines
+  - [x] DocumentRAG
+  - [x] GraphRAG
+  - [x] OntologyRAG     
 - [x] 3D GraphViz for exploring context
 - [x] Fully Agentic System
   - [x] Single Agent
