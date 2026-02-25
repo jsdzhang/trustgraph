@@ -19,7 +19,7 @@ Durable agent memory you can trust. Build, version, and retrieve grounded contex
 
 - Give agents **memory** that persists across sessions and deployments.
 - Reduce hallucinations with **grounded context retrieval**
-- Ship reusable, portable [Context Cores](https://docs.trustgraph.ai/guides/context-cores/) (packaged context you can move between projects/environments).
+- Ship reusable, portable [Context Cores](#context-cores) (packaged context you can move between projects/environments).
 
 The context backend:
 - [x] Multi-model and multimodal database system
