@@ -612,8 +612,12 @@ class AsyncFlowInstance:
                 print(f"{entity['name']}: {entity['score']}")
             ```
         """
+        # First convert text to embeddings vectors
+        emb_result = await self.embeddings(text=text)
+        vectors = emb_result.get("vectors", [])
+
         request_data = {
-            "text": text,
+            "vectors": vectors,
             "user": user,
             "collection": collection,
             "limit": limit
@@ -704,18 +708,18 @@ class AsyncFlowInstance:
 
         return await self.request("triples", request_data)
 
-    async def objects_query(self, query: str, user: str, collection: str, variables: Optional[Dict] = None,
-                            operation_name: Optional[str] = None, **kwargs: Any):
+    async def rows_query(self, query: str, user: str, collection: str, variables: Optional[Dict] = None,
+                         operation_name: Optional[str] = None, **kwargs: Any):
         """
-        Execute a GraphQL query on stored objects.
+        Execute a GraphQL query on stored rows.
 
-        Queries structured data objects using GraphQL syntax. Supports complex
+        Queries structured data rows using GraphQL syntax. Supports complex
         queries with variables and named operations.
 
         Args:
             query: GraphQL query string
             user: User identifier
-            collection: Collection identifier containing objects
+            collection: Collection identifier containing rows
             variables: Optional GraphQL query variables
             operation_name: Optional operation name for multi-operation queries
             **kwargs: Additional service-specific parameters
@@ -739,7 +743,7 @@ class AsyncFlowInstance:
                 }
             '''
 
-            result = await flow.objects_query(
+            result = await flow.rows_query(
                 query=query,
                 user="trustgraph",
                 collection="users",
@@ -761,4 +765,64 @@ class AsyncFlowInstance:
             request_data["operationName"] = operation_name
         request_data.update(kwargs)
 
-        return await self.request("objects", request_data)
+        return await self.request("rows", request_data)
+
+    async def row_embeddings_query(
+        self, text: str, schema_name: str, user: str = "trustgraph",
+        collection: str = "default", index_name: Optional[str] = None,
+        limit: int = 10, **kwargs: Any
+    ):
+        """
+        Query row embeddings for semantic search on structured data.
+
+        Performs semantic search over row index embeddings to find rows whose
+        indexed field values are most similar to the input text. Enables
+        fuzzy/semantic matching on structured data.
+
+        Args:
+            text: Query text for semantic search
+            schema_name: Schema name to search within
+            user: User identifier (default: "trustgraph")
+            collection: Collection identifier (default: "default")
+            index_name: Optional index name to filter search to specific index
+            limit: Maximum number of results to return (default: 10)
+            **kwargs: Additional service-specific parameters
+
+        Returns:
+            dict: Response containing matches with index_name, index_value,
+                  text, and score
+
+        Example:
+            ```python
+            async_flow = await api.async_flow()
+            flow = async_flow.id("default")
+
+            # Search for customers by name similarity
+            results = await flow.row_embeddings_query(
+                text="John Smith",
+                schema_name="customers",
+                user="trustgraph",
+                collection="sales",
+                limit=5
+            )
+
+            for match in results.get("matches", []):
+                print(f"{match['index_name']}: {match['index_value']} (score: {match['score']})")
+            ```
+        """
+        # First convert text to embeddings vectors
+        emb_result = await self.embeddings(text=text)
+        vectors = emb_result.get("vectors", [])
+
+        request_data = {
+            "vectors": vectors,
+            "schema_name": schema_name,
+            "user": user,
+            "collection": collection,
+            "limit": limit
+        }
+        if index_name:
+            request_data["index_name"] = index_name
+        request_data.update(kwargs)
+
+        return await self.request("row-embeddings", request_data)

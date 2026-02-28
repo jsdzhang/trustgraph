@@ -11,13 +11,13 @@ from qdrant_client.models import PointStruct
 from qdrant_client.models import Distance, VectorParams
 
 from .... schema import DocumentEmbeddingsResponse
-from .... schema import Error, Value
+from .... schema import Error
 from .... base import DocumentEmbeddingsQueryService
 
 # Module logger
 logger = logging.getLogger(__name__)
 
-default_ident = "de-query"
+default_ident = "doc-embeddings-query"
 
 default_store_uri = 'http://localhost:6333'
 

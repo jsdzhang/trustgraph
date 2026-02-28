@@ -9,7 +9,7 @@ import json
 import urllib.parse
 import logging
 
-from .... schema import Chunk, Triple, Triples, Metadata, Value
+from .... schema import Chunk, Triple, Triples, Metadata, Term, IRI, LITERAL
 
 # Module logger
 logger = logging.getLogger(__name__)
@@ -20,12 +20,14 @@ from .... rdf import TRUSTGRAPH_ENTITIES, DEFINITION, RDF_LABEL, SUBJECT_OF
 from .... base import FlowProcessor, ConsumerSpec,  ProducerSpec
 from .... base import PromptClientSpec
 
-DEFINITION_VALUE = Value(value=DEFINITION, is_uri=True)
-RDF_LABEL_VALUE = Value(value=RDF_LABEL, is_uri=True)
-SUBJECT_OF_VALUE = Value(value=SUBJECT_OF, is_uri=True)
+DEFINITION_VALUE = Term(type=IRI, iri=DEFINITION)
+RDF_LABEL_VALUE = Term(type=IRI, iri=RDF_LABEL)
+SUBJECT_OF_VALUE = Term(type=IRI, iri=SUBJECT_OF)
 
 default_ident = "kg-extract-definitions"
 default_concurrency = 1
+default_triples_batch_size = 50
+default_entity_batch_size = 5
 
 class Processor(FlowProcessor):
 
@@ -33,6 +35,8 @@ class Processor(FlowProcessor):
 
         id = params.get("id")
         concurrency = params.get("concurrency", 1)
+        self.triples_batch_size = params.get("triples_batch_size", default_triples_batch_size)
+        self.entity_batch_size = params.get("entity_batch_size", default_entity_batch_size)
 
         super(Processor, self).__init__(
             **params | {
@@ -142,13 +146,13 @@ class Processor(FlowProcessor):
 
                 s_uri = self.to_uri(s)
 
-                s_value = Value(value=str(s_uri), is_uri=True)
-                o_value = Value(value=str(o), is_uri=False)
+                s_value = Term(type=IRI, iri=str(s_uri))
+                o_value = Term(type=LITERAL, value=str(o))
 
                 triples.append(Triple(
                     s=s_value,
                     p=RDF_LABEL_VALUE,
-                    o=Value(value=s, is_uri=False),
+                    o=Term(type=LITERAL, value=s),
                 ))
 
                 triples.append(Triple(
@@ -158,37 +162,48 @@ class Processor(FlowProcessor):
                 triples.append(Triple(
                     s=s_value,
                     p=SUBJECT_OF_VALUE,
-                    o=Value(value=v.metadata.id, is_uri=True)
+                    o=Term(type=IRI, iri=v.metadata.id)
                 ))
 
-                ec = EntityContext(
+                # Output entity name as context for direct name matching
+                entities.append(EntityContext(
+                    entity=s_value,
+                    context=s,
+                ))
+
+                # Output definition as context for semantic matching
+                entities.append(EntityContext(
                     entity=s_value,
                     context=defn["definition"],
+                ))
+
+            # Send triples in batches
+            for i in range(0, len(triples), self.triples_batch_size):
+                batch = triples[i:i + self.triples_batch_size]
+                await self.emit_triples(
+                    flow("triples"),
+                    Metadata(
+                        id=v.metadata.id,
+                        metadata=[],
+                        user=v.metadata.user,
+                        collection=v.metadata.collection,
+                    ),
+                    batch
                 )
 
-                entities.append(ec)
-
-            await self.emit_triples(
-                flow("triples"),
-                Metadata(
-                    id=v.metadata.id,
-                    metadata=[],
-                    user=v.metadata.user,
-                    collection=v.metadata.collection,
-                ),
-                triples
-            )
-
-            await self.emit_ecs(
-                flow("entity-contexts"),
-                Metadata(
-                    id=v.metadata.id,
-                    metadata=[],
-                    user=v.metadata.user,
-                    collection=v.metadata.collection,
-                ),
-                entities
-            )
+            # Send entity contexts in batches
+            for i in range(0, len(entities), self.entity_batch_size):
+                batch = entities[i:i + self.entity_batch_size]
+                await self.emit_ecs(
+                    flow("entity-contexts"),
+                    Metadata(
+                        id=v.metadata.id,
+                        metadata=[],
+                        user=v.metadata.user,
+                        collection=v.metadata.collection,
+                    ),
+                    batch
+                )
 
         except Exception as e:
             logger.error(f"Definitions extraction exception: {e}", exc_info=True)
@@ -203,6 +218,20 @@ class Processor(FlowProcessor):
             type=int,
             default=default_concurrency,
             help=f'Concurrent processing threads (default: {default_concurrency})'
+        )
+
+        parser.add_argument(
+            '--triples-batch-size',
+            type=int,
+            default=default_triples_batch_size,
+            help=f'Maximum triples per output message (default: {default_triples_batch_size})'
+        )
+
+        parser.add_argument(
+            '--entity-batch-size',
+            type=int,
+            default=default_entity_batch_size,
+            help=f'Maximum entity contexts per output message (default: {default_entity_batch_size})'
         )
 
         FlowProcessor.add_args(parser)

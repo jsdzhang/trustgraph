@@ -73,6 +73,8 @@ from .async_metrics import AsyncMetrics
 # Types
 from .types import (
     Triple,
+    Uri,
+    Literal,
     ConfigKey,
     ConfigValue,
     DocumentMetadata,
@@ -99,7 +101,7 @@ from .exceptions import (
     LoadError,
     LookupError,
     NLPQueryError,
-    ObjectsQueryError,
+    RowsQueryError,
     RequestError,
     StructuredQueryError,
     UnexpectedError,
@@ -133,6 +135,8 @@ __all__ = [
 
     # Types
     "Triple",
+    "Uri",
+    "Literal",
     "ConfigKey",
     "ConfigValue",
     "DocumentMetadata",
@@ -157,7 +161,7 @@ __all__ = [
     "LoadError",
     "LookupError",
     "NLPQueryError",
-    "ObjectsQueryError",
+    "RowsQueryError",
     "RequestError",
     "StructuredQueryError",
     "UnexpectedError",

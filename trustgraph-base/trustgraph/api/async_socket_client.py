@@ -282,8 +282,12 @@ class AsyncSocketFlowInstance:
 
     async def graph_embeddings_query(self, text: str, user: str, collection: str, limit: int = 10, **kwargs):
         """Query graph embeddings for semantic search"""
+        # First convert text to embeddings vectors
+        emb_result = await self.embeddings(text=text)
+        vectors = emb_result.get("vectors", [])
+
         request = {
-            "text": text,
+            "vectors": vectors,
             "user": user,
             "collection": collection,
             "limit": limit
@@ -316,9 +320,9 @@ class AsyncSocketFlowInstance:
 
         return await self.client._send_request("triples", self.flow_id, request)
 
-    async def objects_query(self, query: str, user: str, collection: str, variables: Optional[Dict] = None,
-                            operation_name: Optional[str] = None, **kwargs):
-        """GraphQL query"""
+    async def rows_query(self, query: str, user: str, collection: str, variables: Optional[Dict] = None,
+                         operation_name: Optional[str] = None, **kwargs):
+        """GraphQL query against structured rows"""
         request = {
             "query": query,
             "user": user,
@@ -330,7 +334,7 @@ class AsyncSocketFlowInstance:
             request["operationName"] = operation_name
         request.update(kwargs)
 
-        return await self.client._send_request("objects", self.flow_id, request)
+        return await self.client._send_request("rows", self.flow_id, request)
 
     async def mcp_tool(self, name: str, parameters: Dict[str, Any], **kwargs):
         """Execute MCP tool"""
@@ -341,3 +345,26 @@ class AsyncSocketFlowInstance:
         request.update(kwargs)
 
         return await self.client._send_request("mcp-tool", self.flow_id, request)
+
+    async def row_embeddings_query(
+        self, text: str, schema_name: str, user: str = "trustgraph",
+        collection: str = "default", index_name: Optional[str] = None,
+        limit: int = 10, **kwargs
+    ):
+        """Query row embeddings for semantic search on structured data"""
+        # First convert text to embeddings vectors
+        emb_result = await self.embeddings(text=text)
+        vectors = emb_result.get("vectors", [])
+
+        request = {
+            "vectors": vectors,
+            "schema_name": schema_name,
+            "user": user,
+            "collection": collection,
+            "limit": limit
+        }
+        if index_name:
+            request["index_name"] = index_name
+        request.update(kwargs)
+
+        return await self.client._send_request("row-embeddings", self.flow_id, request)

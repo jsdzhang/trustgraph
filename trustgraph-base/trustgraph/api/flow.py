@@ -10,12 +10,27 @@ import json
 import base64
 
 from .. knowledge import hash, Uri, Literal
+from .. schema import IRI, LITERAL
 from . types import Triple
 from . exceptions import ProtocolException
 
+
 def to_value(x):
-    if x["e"]: return Uri(x["v"])
-    return Literal(x["v"])
+    """Convert wire format to Uri or Literal."""
+    if x.get("t") == IRI:
+        return Uri(x.get("i", ""))
+    elif x.get("t") == LITERAL:
+        return Literal(x.get("v", ""))
+    # Fallback for any other type
+    return Literal(x.get("v", x.get("i", "")))
+
+
+def from_value(v):
+    """Convert Uri or Literal to wire format."""
+    if isinstance(v, Uri):
+        return {"t": IRI, "i": str(v)}
+    else:
+        return {"t": LITERAL, "v": str(v)}
 
 class Flow:
     """
@@ -569,9 +584,13 @@ class FlowInstance:
             ```
         """
 
+        # First convert text to embeddings vectors
+        emb_result = self.embeddings(text=text)
+        vectors = emb_result.get("vectors", [])
+
         # Query graph embeddings for semantic search
         input = {
-            "text": text,
+            "vectors": vectors,
             "user": user,
             "collection": collection,
             "limit": limit
@@ -579,6 +598,51 @@ class FlowInstance:
 
         return self.request(
             "service/graph-embeddings",
+            input
+        )
+
+    def document_embeddings_query(self, text, user, collection, limit=10):
+        """
+        Query document chunks using semantic similarity.
+
+        Finds document chunks whose content is semantically similar to the
+        input text, using vector embeddings.
+
+        Args:
+            text: Query text for semantic search
+            user: User/keyspace identifier
+            collection: Collection identifier
+            limit: Maximum number of results (default: 10)
+
+        Returns:
+            dict: Query results with similar document chunks
+
+        Example:
+            ```python
+            flow = api.flow().id("default")
+            results = flow.document_embeddings_query(
+                text="machine learning algorithms",
+                user="trustgraph",
+                collection="research-papers",
+                limit=5
+            )
+            ```
+        """
+
+        # First convert text to embeddings vectors
+        emb_result = self.embeddings(text=text)
+        vectors = emb_result.get("vectors", [])
+
+        # Query document embeddings for semantic search
+        input = {
+            "vectors": vectors,
+            "user": user,
+            "collection": collection,
+            "limit": limit
+        }
+
+        return self.request(
+            "service/document-embeddings",
             input
         )
 
@@ -751,17 +815,17 @@ class FlowInstance:
         if s:
             if not isinstance(s, Uri):
                 raise RuntimeError("s must be Uri")
-            input["s"] = { "v": str(s), "e": isinstance(s, Uri), }
-            
+            input["s"] = from_value(s)
+
         if p:
             if not isinstance(p, Uri):
                 raise RuntimeError("p must be Uri")
-            input["p"] = { "v": str(p), "e": isinstance(p, Uri), }
+            input["p"] = from_value(p)
 
         if o:
             if not isinstance(o, Uri) and not isinstance(o, Literal):
                 raise RuntimeError("o must be Uri or Literal")
-            input["o"] = { "v": str(o), "e": isinstance(o, Uri), }
+            input["o"] = from_value(o)
 
         object = self.request(
             "service/triples",
@@ -834,9 +898,9 @@ class FlowInstance:
         if metadata:
             metadata.emit(
                 lambda t: triples.append({
-                    "s": { "v": t["s"], "e": isinstance(t["s"], Uri) },
-                    "p": { "v": t["p"], "e": isinstance(t["p"], Uri) },
-                    "o": { "v": t["o"], "e": isinstance(t["o"], Uri) }
+                    "s": from_value(t["s"]),
+                    "p": from_value(t["p"]),
+                    "o": from_value(t["o"]),
                 })
             )
 
@@ -913,9 +977,9 @@ class FlowInstance:
         if metadata:
             metadata.emit(
                 lambda t: triples.append({
-                    "s": { "v": t["s"], "e": isinstance(t["s"], Uri) },
-                    "p": { "v": t["p"], "e": isinstance(t["p"], Uri) },
-                    "o": { "v": t["o"], "e": isinstance(t["o"], Uri) }
+                    "s": from_value(t["s"]),
+                    "p": from_value(t["p"]),
+                    "o": from_value(t["o"]),
                 })
             )
 
@@ -937,12 +1001,12 @@ class FlowInstance:
             input
         )
 
-    def objects_query(
+    def rows_query(
             self, query, user="trustgraph", collection="default",
             variables=None, operation_name=None
     ):
         """
-        Execute a GraphQL query against structured objects in the knowledge graph.
+        Execute a GraphQL query against structured rows in the knowledge graph.
 
         Queries structured data using GraphQL syntax, allowing complex queries
         with filtering, aggregation, and relationship traversal.
@@ -974,7 +1038,7 @@ class FlowInstance:
               }
             }
             '''
-            result = flow.objects_query(
+            result = flow.rows_query(
                 query=query,
                 user="trustgraph",
                 collection="scientists"
@@ -989,7 +1053,7 @@ class FlowInstance:
               }
             }
             '''
-            result = flow.objects_query(
+            result = flow.rows_query(
                 query=query,
                 variables={"name": "Marie Curie"}
             )
@@ -1010,7 +1074,7 @@ class FlowInstance:
             input["operation_name"] = operation_name
 
         response = self.request(
-            "service/objects",
+            "service/rows",
             input
         )
 
@@ -1232,4 +1296,79 @@ class FlowInstance:
             raise ProtocolException(f"{error_type}: {error_message}")
 
         return response["schema-matches"]
+
+    def row_embeddings_query(
+            self, text, schema_name, user="trustgraph", collection="default",
+            index_name=None, limit=10
+    ):
+        """
+        Query row data using semantic similarity on indexed fields.
+
+        Finds rows whose indexed field values are semantically similar to the
+        input text, using vector embeddings. This enables fuzzy/semantic matching
+        on structured data.
+
+        Args:
+            text: Query text for semantic search
+            schema_name: Schema name to search within
+            user: User/keyspace identifier (default: "trustgraph")
+            collection: Collection identifier (default: "default")
+            index_name: Optional index name to filter search to specific index
+            limit: Maximum number of results (default: 10)
+
+        Returns:
+            dict: Query results with matches containing index_name, index_value,
+                  text, and score
+
+        Example:
+            ```python
+            flow = api.flow().id("default")
+
+            # Search for customers by name similarity
+            results = flow.row_embeddings_query(
+                text="John Smith",
+                schema_name="customers",
+                user="trustgraph",
+                collection="sales",
+                limit=5
+            )
+
+            # Filter to specific index
+            results = flow.row_embeddings_query(
+                text="machine learning engineer",
+                schema_name="employees",
+                index_name="job_title",
+                limit=10
+            )
+            ```
+        """
+
+        # First convert text to embeddings vectors
+        emb_result = self.embeddings(text=text)
+        vectors = emb_result.get("vectors", [])
+
+        # Query row embeddings for semantic search
+        input = {
+            "vectors": vectors,
+            "schema_name": schema_name,
+            "user": user,
+            "collection": collection,
+            "limit": limit
+        }
+
+        if index_name:
+            input["index_name"] = index_name
+
+        response = self.request(
+            "service/row-embeddings",
+            input
+        )
+
+        # Check for system-level error
+        if "error" in response and response["error"]:
+            error_type = response["error"].get("type", "unknown")
+            error_message = response["error"].get("message", "Unknown error")
+            raise ProtocolException(f"{error_type}: {error_message}")
+
+        return response
 

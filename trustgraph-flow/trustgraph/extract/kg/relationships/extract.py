@@ -13,18 +13,19 @@ import urllib.parse
 logger = logging.getLogger(__name__)
 
 from .... schema import Chunk, Triple, Triples
-from .... schema import Metadata, Value
+from .... schema import Metadata, Term, IRI, LITERAL
 from .... schema import PromptRequest, PromptResponse
 from .... rdf import RDF_LABEL, TRUSTGRAPH_ENTITIES, SUBJECT_OF
 
 from .... base import FlowProcessor, ConsumerSpec,  ProducerSpec
 from .... base import PromptClientSpec
 
-RDF_LABEL_VALUE = Value(value=RDF_LABEL, is_uri=True)
-SUBJECT_OF_VALUE = Value(value=SUBJECT_OF, is_uri=True)
+RDF_LABEL_VALUE = Term(type=IRI, iri=RDF_LABEL)
+SUBJECT_OF_VALUE = Term(type=IRI, iri=SUBJECT_OF)
 
 default_ident = "kg-extract-relationships"
 default_concurrency = 1
+default_triples_batch_size = 50
 
 class Processor(FlowProcessor):
 
@@ -32,6 +33,7 @@ class Processor(FlowProcessor):
 
         id = params.get("id")
         concurrency = params.get("concurrency", 1)
+        self.triples_batch_size = params.get("triples_batch_size", default_triples_batch_size)
 
         super(Processor, self).__init__(
             **params | {
@@ -127,16 +129,16 @@ class Processor(FlowProcessor):
                 if o is None: continue
 
                 s_uri = self.to_uri(s)
-                s_value = Value(value=str(s_uri), is_uri=True)
+                s_value = Term(type=IRI, iri=str(s_uri))
 
                 p_uri = self.to_uri(p)
-                p_value = Value(value=str(p_uri), is_uri=True)
+                p_value = Term(type=IRI, iri=str(p_uri))
 
-                if rel["object-entity"]: 
+                if rel["object-entity"]:
                     o_uri = self.to_uri(o)
-                    o_value = Value(value=str(o_uri), is_uri=True)
+                    o_value = Term(type=IRI, iri=str(o_uri))
                 else:
-                    o_value = Value(value=str(o), is_uri=False)
+                    o_value = Term(type=LITERAL, value=str(o))
 
                 triples.append(Triple(
                     s=s_value,
@@ -148,14 +150,14 @@ class Processor(FlowProcessor):
                 triples.append(Triple(
                     s=s_value,
                     p=RDF_LABEL_VALUE,
-                    o=Value(value=str(s), is_uri=False)
+                    o=Term(type=LITERAL, value=str(s))
                 ))
 
                 # Label for p
                 triples.append(Triple(
                     s=p_value,
                     p=RDF_LABEL_VALUE,
-                    o=Value(value=str(p), is_uri=False)
+                    o=Term(type=LITERAL, value=str(p))
                 ))
 
                 if rel["object-entity"]:
@@ -163,14 +165,14 @@ class Processor(FlowProcessor):
                     triples.append(Triple(
                         s=o_value,
                         p=RDF_LABEL_VALUE,
-                        o=Value(value=str(o), is_uri=False)
+                        o=Term(type=LITERAL, value=str(o))
                     ))
 
                 # 'Subject of' for s
                 triples.append(Triple(
                     s=s_value,
                     p=SUBJECT_OF_VALUE,
-                    o=Value(value=v.metadata.id, is_uri=True)
+                    o=Term(type=IRI, iri=v.metadata.id)
                 ))
 
                 if rel["object-entity"]:
@@ -178,19 +180,22 @@ class Processor(FlowProcessor):
                     triples.append(Triple(
                         s=o_value,
                         p=SUBJECT_OF_VALUE,
-                        o=Value(value=v.metadata.id, is_uri=True)
+                        o=Term(type=IRI, iri=v.metadata.id)
                     ))
 
-            await self.emit_triples(
-                flow("triples"),
-                Metadata(
-                    id=v.metadata.id,
-                    metadata=[],
-                    user=v.metadata.user,
-                    collection=v.metadata.collection,
-                ),
-                triples
-            )
+            # Send triples in batches
+            for i in range(0, len(triples), self.triples_batch_size):
+                batch = triples[i:i + self.triples_batch_size]
+                await self.emit_triples(
+                    flow("triples"),
+                    Metadata(
+                        id=v.metadata.id,
+                        metadata=[],
+                        user=v.metadata.user,
+                        collection=v.metadata.collection,
+                    ),
+                    batch
+                )
 
         except Exception as e:
             logger.error(f"Relationship extraction exception: {e}", exc_info=True)
@@ -205,6 +210,13 @@ class Processor(FlowProcessor):
             type=int,
             default=default_concurrency,
             help=f'Concurrent processing threads (default: {default_concurrency})'
+        )
+
+        parser.add_argument(
+            '--triples-batch-size',
+            type=int,
+            default=default_triples_batch_size,
+            help=f'Maximum triples per output message (default: {default_triples_batch_size})'
         )
 
         FlowProcessor.add_args(parser)

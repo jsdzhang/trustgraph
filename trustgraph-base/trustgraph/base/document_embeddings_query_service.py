@@ -7,7 +7,7 @@ embeddings.
 import logging
 
 from .. schema import DocumentEmbeddingsRequest, DocumentEmbeddingsResponse
-from .. schema import Error, Value
+from .. schema import Error, Term
 
 from . flow_processor import FlowProcessor
 from . consumer_spec import ConsumerSpec
@@ -16,7 +16,7 @@ from . producer_spec import ProducerSpec
 # Module logger
 logger = logging.getLogger(__name__)
 
-default_ident = "ge-query"
+default_ident = "doc-embeddings-query"
 
 class DocumentEmbeddingsQueryService(FlowProcessor):
 

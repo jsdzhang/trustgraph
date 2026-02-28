@@ -10,7 +10,7 @@ description = "TrustGraph provides a means to run a pipeline of flexible AI proc
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
-    "trustgraph-base>=1.8,<1.9",
+    "trustgraph-base>=2.0,<2.1",
     "requests",
     "pulsar-client",
     "aiohttp",
@@ -43,9 +43,13 @@ tg-invoke-agent = "trustgraph.cli.invoke_agent:main"
 tg-invoke-document-rag = "trustgraph.cli.invoke_document_rag:main"
 tg-invoke-graph-rag = "trustgraph.cli.invoke_graph_rag:main"
 tg-invoke-llm = "trustgraph.cli.invoke_llm:main"
+tg-invoke-embeddings = "trustgraph.cli.invoke_embeddings:main"
+tg-invoke-graph-embeddings = "trustgraph.cli.invoke_graph_embeddings:main"
+tg-invoke-document-embeddings = "trustgraph.cli.invoke_document_embeddings:main"
 tg-invoke-mcp-tool = "trustgraph.cli.invoke_mcp_tool:main"
 tg-invoke-nlp-query = "trustgraph.cli.invoke_nlp_query:main"
-tg-invoke-objects-query = "trustgraph.cli.invoke_objects_query:main"
+tg-invoke-rows-query = "trustgraph.cli.invoke_rows_query:main"
+tg-invoke-row-embeddings = "trustgraph.cli.invoke_row_embeddings:main"
 tg-invoke-prompt = "trustgraph.cli.invoke_prompt:main"
 tg-invoke-structured-query = "trustgraph.cli.invoke_structured_query:main"
 tg-load-doc-embeds = "trustgraph.cli.load_doc_embeds:main"

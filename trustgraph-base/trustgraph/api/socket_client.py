@@ -649,8 +649,12 @@ class SocketFlowInstance:
             )
             ```
         """
+        # First convert text to embeddings vectors
+        emb_result = self.embeddings(text=text)
+        vectors = emb_result.get("vectors", [])
+
         request = {
-            "text": text,
+            "vectors": vectors,
             "user": user,
             "collection": collection,
             "limit": limit
@@ -658,6 +662,54 @@ class SocketFlowInstance:
         request.update(kwargs)
 
         return self.client._send_request_sync("graph-embeddings", self.flow_id, request, False)
+
+    def document_embeddings_query(
+        self,
+        text: str,
+        user: str,
+        collection: str,
+        limit: int = 10,
+        **kwargs: Any
+    ) -> Dict[str, Any]:
+        """
+        Query document chunks using semantic similarity.
+
+        Args:
+            text: Query text for semantic search
+            user: User/keyspace identifier
+            collection: Collection identifier
+            limit: Maximum number of results (default: 10)
+            **kwargs: Additional parameters passed to the service
+
+        Returns:
+            dict: Query results with similar document chunks
+
+        Example:
+            ```python
+            socket = api.socket()
+            flow = socket.flow("default")
+
+            results = flow.document_embeddings_query(
+                text="machine learning algorithms",
+                user="trustgraph",
+                collection="research-papers",
+                limit=5
+            )
+            ```
+        """
+        # First convert text to embeddings vectors
+        emb_result = self.embeddings(text=text)
+        vectors = emb_result.get("vectors", [])
+
+        request = {
+            "vectors": vectors,
+            "user": user,
+            "collection": collection,
+            "limit": limit
+        }
+        request.update(kwargs)
+
+        return self.client._send_request_sync("document-embeddings", self.flow_id, request, False)
 
     def embeddings(self, text: str, **kwargs: Any) -> Dict[str, Any]:
         """
@@ -737,7 +789,7 @@ class SocketFlowInstance:
 
         return self.client._send_request_sync("triples", self.flow_id, request, False)
 
-    def objects_query(
+    def rows_query(
         self,
         query: str,
         user: str,
@@ -747,7 +799,7 @@ class SocketFlowInstance:
         **kwargs: Any
     ) -> Dict[str, Any]:
         """
-        Execute a GraphQL query against structured objects.
+        Execute a GraphQL query against structured rows.
 
         Args:
             query: GraphQL query string
@@ -774,7 +826,7 @@ class SocketFlowInstance:
               }
             }
             '''
-            result = flow.objects_query(
+            result = flow.rows_query(
                 query=query,
                 user="trustgraph",
                 collection="scientists"
@@ -792,7 +844,7 @@ class SocketFlowInstance:
             request["operationName"] = operation_name
         request.update(kwargs)
 
-        return self.client._send_request_sync("objects", self.flow_id, request, False)
+        return self.client._send_request_sync("rows", self.flow_id, request, False)
 
     def mcp_tool(
         self,
@@ -829,3 +881,73 @@ class SocketFlowInstance:
         request.update(kwargs)
 
         return self.client._send_request_sync("mcp-tool", self.flow_id, request, False)
+
+    def row_embeddings_query(
+        self,
+        text: str,
+        schema_name: str,
+        user: str = "trustgraph",
+        collection: str = "default",
+        index_name: Optional[str] = None,
+        limit: int = 10,
+        **kwargs: Any
+    ) -> Dict[str, Any]:
+        """
+        Query row data using semantic similarity on indexed fields.
+
+        Finds rows whose indexed field values are semantically similar to the
+        input text, using vector embeddings. This enables fuzzy/semantic matching
+        on structured data.
+
+        Args:
+            text: Query text for semantic search
+            schema_name: Schema name to search within
+            user: User/keyspace identifier (default: "trustgraph")
+            collection: Collection identifier (default: "default")
+            index_name: Optional index name to filter search to specific index
+            limit: Maximum number of results (default: 10)
+            **kwargs: Additional parameters passed to the service
+
+        Returns:
+            dict: Query results with matches containing index_name, index_value,
+                  text, and score
+
+        Example:
+            ```python
+            socket = api.socket()
+            flow = socket.flow("default")
+
+            # Search for customers by name similarity
+            results = flow.row_embeddings_query(
+                text="John Smith",
+                schema_name="customers",
+                user="trustgraph",
+                collection="sales",
+                limit=5
+            )
+
+            # Filter to specific index
+            results = flow.row_embeddings_query(
+                text="machine learning engineer",
+                schema_name="employees",
+                index_name="job_title",
+                limit=10
+            )
+            ```
+        """
+        # First convert text to embeddings vectors
+        emb_result = self.embeddings(text=text)
+        vectors = emb_result.get("vectors", [])
+
+        request = {
+            "vectors": vectors,
+            "schema_name": schema_name,
+            "user": user,
+            "collection": collection,
+            "limit": limit
+        }
+        if index_name:
+            request["index_name"] = index_name
+        request.update(kwargs)
+
+        return self.client._send_request_sync("row-embeddings", self.flow_id, request, False)

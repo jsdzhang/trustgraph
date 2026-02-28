@@ -1,5 +1,5 @@
 from .base import Translator, MessageTranslator
-from .primitives import ValueTranslator, TripleTranslator, SubgraphTranslator, RowSchemaTranslator, FieldTranslator, row_schema_translator, field_translator
+from .primitives import TermTranslator, ValueTranslator, TripleTranslator, SubgraphTranslator, RowSchemaTranslator, FieldTranslator, row_schema_translator, field_translator
 from .metadata import DocumentMetadataTranslator, ProcessingMetadataTranslator
 from .agent import AgentRequestTranslator, AgentResponseTranslator
 from .embeddings import EmbeddingsRequestTranslator, EmbeddingsResponseTranslator
@@ -15,7 +15,8 @@ from .flow import FlowRequestTranslator, FlowResponseTranslator
 from .prompt import PromptRequestTranslator, PromptResponseTranslator
 from .embeddings_query import (
     DocumentEmbeddingsRequestTranslator, DocumentEmbeddingsResponseTranslator,
-    GraphEmbeddingsRequestTranslator, GraphEmbeddingsResponseTranslator
+    GraphEmbeddingsRequestTranslator, GraphEmbeddingsResponseTranslator,
+    RowEmbeddingsRequestTranslator, RowEmbeddingsResponseTranslator
 )
-from .objects_query import ObjectsQueryRequestTranslator, ObjectsQueryResponseTranslator
+from .rows_query import RowsQueryRequestTranslator, RowsQueryResponseTranslator
 from .diagnosis import StructuredDataDiagnosisRequestTranslator, StructuredDataDiagnosisResponseTranslator

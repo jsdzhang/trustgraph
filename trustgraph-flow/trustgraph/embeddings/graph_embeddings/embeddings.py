@@ -16,12 +16,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 default_ident = "graph-embeddings"
+default_batch_size = 5
 
 class Processor(FlowProcessor):
 
     def __init__(self, **params):
 
         id = params.get("id")
+        self.batch_size = params.get("batch_size", default_batch_size)
 
         super(Processor, self).__init__(
             **params | {
@@ -73,12 +75,14 @@ class Processor(FlowProcessor):
                     )
                 )
 
-            r = GraphEmbeddings(
-                metadata=v.metadata,
-                entities=entities,
-            )
-
-            await flow("output").send(r)
+            # Send in batches to avoid oversized messages
+            for i in range(0, len(entities), self.batch_size):
+                batch = entities[i:i + self.batch_size]
+                r = GraphEmbeddings(
+                    metadata=v.metadata,
+                    entities=batch,
+                )
+                await flow("output").send(r)
 
         except Exception as e:
             logger.error("Exception occurred", exc_info=True)
@@ -90,6 +94,13 @@ class Processor(FlowProcessor):
 
     @staticmethod
     def add_args(parser):
+
+        parser.add_argument(
+            '--batch-size',
+            type=int,
+            default=default_batch_size,
+            help=f'Maximum entities per output message (default: {default_batch_size})'
+        )
 
         FlowProcessor.add_args(parser)
 

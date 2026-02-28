@@ -3,7 +3,7 @@ import json
 import urllib.parse
 import logging
 
-from ....schema import Chunk, Triple, Triples, Metadata, Value
+from ....schema import Chunk, Triple, Triples, Metadata, Term, IRI, LITERAL
 from ....schema import EntityContext, EntityContexts
 
 from ....rdf import TRUSTGRAPH_ENTITIES, RDF_LABEL, SUBJECT_OF, DEFINITION
@@ -126,16 +126,42 @@ class Processor(FlowProcessor):
 
         await pub.send(ecs)
 
-    def parse_json(self, text):
-        json_match = re.search(r'```(?:json)?(.*?)```', text, re.DOTALL)
-    
-        if json_match:
-            json_str = json_match.group(1).strip()
-        else:
-            # If no delimiters, assume the entire output is JSON
-            json_str = text.strip()
+    def parse_jsonl(self, text):
+        """
+        Parse JSONL response, returning list of valid objects.
 
-        return json.loads(json_str)
+        Invalid lines (malformed JSON, empty lines) are skipped with warnings.
+        This provides truncation resilience - partial output yields partial results.
+        """
+        results = []
+
+        # Strip markdown code fences if present
+        text = text.strip()
+        if text.startswith('```'):
+            # Remove opening fence (possibly with language hint)
+            text = re.sub(r'^```(?:json|jsonl)?\s*\n?', '', text)
+        if text.endswith('```'):
+            text = text[:-3]
+
+        for line_num, line in enumerate(text.strip().split('\n'), 1):
+            line = line.strip()
+
+            # Skip empty lines
+            if not line:
+                continue
+
+            # Skip any remaining fence markers
+            if line.startswith('```'):
+                continue
+
+            try:
+                obj = json.loads(line)
+                results.append(obj)
+            except json.JSONDecodeError as e:
+                # Log warning but continue - this provides truncation resilience
+                logger.warning(f"JSONL parse error on line {line_num}: {e}")
+
+        return results
 
     async def on_message(self, msg, consumer, flow):
 
@@ -178,11 +204,12 @@ class Processor(FlowProcessor):
                 question = prompt
             )
             
-            # Parse JSON response
-            try:
-                extraction_data = self.parse_json(agent_response)
-            except json.JSONDecodeError as e:
-                raise ValueError(f"Invalid JSON response from agent: {e}")
+            # Parse JSONL response
+            extraction_data = self.parse_jsonl(agent_response)
+
+            if not extraction_data:
+                logger.warning("JSONL parse returned no valid objects")
+                return
             
             # Process extraction data
             triples, entity_contexts = self.process_extraction_data(
@@ -209,103 +236,113 @@ class Processor(FlowProcessor):
             raise
 
     def process_extraction_data(self, data, metadata):
-        """Process combined extraction data to generate triples and entity contexts"""
+        """Process JSONL extraction data to generate triples and entity contexts.
+
+        Data is a flat list of objects with 'type' discriminator field:
+        - {"type": "definition", "entity": "...", "definition": "..."}
+        - {"type": "relationship", "subject": "...", "predicate": "...", "object": "...", "object-entity": bool}
+        """
         triples = []
         entity_contexts = []
 
+        # Categorize items by type
+        definitions = [item for item in data if item.get("type") == "definition"]
+        relationships = [item for item in data if item.get("type") == "relationship"]
+
         # Process definitions
-        for defn in data.get("definitions", []):
+        for defn in definitions:
 
             entity_uri = self.to_uri(defn["entity"])
-            
+
             # Add entity label
             triples.append(Triple(
-                s = Value(value=entity_uri, is_uri=True),
-                p = Value(value=RDF_LABEL, is_uri=True),
-                o = Value(value=defn["entity"], is_uri=False),
+                s = Term(type=IRI, iri=entity_uri),
+                p = Term(type=IRI, iri=RDF_LABEL),
+                o = Term(type=LITERAL, value=defn["entity"]),
             ))
-            
+
             # Add definition
             triples.append(Triple(
-                s = Value(value=entity_uri, is_uri=True),
-                p = Value(value=DEFINITION, is_uri=True),
-                o = Value(value=defn["definition"], is_uri=False),
+                s = Term(type=IRI, iri=entity_uri),
+                p = Term(type=IRI, iri=DEFINITION),
+                o = Term(type=LITERAL, value=defn["definition"]),
             ))
-            
+
             # Add subject-of relationship to document
             if metadata.id:
                 triples.append(Triple(
-                    s = Value(value=entity_uri, is_uri=True),
-                    p = Value(value=SUBJECT_OF, is_uri=True),
-                    o = Value(value=metadata.id, is_uri=True),
+                    s = Term(type=IRI, iri=entity_uri),
+                    p = Term(type=IRI, iri=SUBJECT_OF),
+                    o = Term(type=IRI, iri=metadata.id),
                 ))
-            
+
             # Create entity context for embeddings
             entity_contexts.append(EntityContext(
-                entity=Value(value=entity_uri, is_uri=True),
+                entity=Term(type=IRI, iri=entity_uri),
                 context=defn["definition"]
             ))
         
         # Process relationships
-        for rel in data.get("relationships", []):
+        for rel in relationships:
 
             subject_uri = self.to_uri(rel["subject"])
             predicate_uri = self.to_uri(rel["predicate"])
 
-            subject_value = Value(value=subject_uri, is_uri=True)
-            predicate_value = Value(value=predicate_uri, is_uri=True)
-            if data.get("object-entity", False):
-                object_value = Value(value=predicate_uri, is_uri=True)
+            subject_value = Term(type=IRI, iri=subject_uri)
+            predicate_value = Term(type=IRI, iri=predicate_uri)
+            if rel.get("object-entity", True):
+                object_uri = self.to_uri(rel["object"])
+                object_value = Term(type=IRI, iri=object_uri)
             else:
-                object_value = Value(value=predicate_uri, is_uri=False)
-            
+                object_value = Term(type=LITERAL, value=rel["object"])
+
             # Add subject and predicate labels
             triples.append(Triple(
                 s = subject_value,
-                p = Value(value=RDF_LABEL, is_uri=True),
-                o = Value(value=rel["subject"], is_uri=False),
+                p = Term(type=IRI, iri=RDF_LABEL),
+                o = Term(type=LITERAL, value=rel["subject"]),
             ))
-            
+
             triples.append(Triple(
                 s = predicate_value,
-                p = Value(value=RDF_LABEL, is_uri=True),
-                o = Value(value=rel["predicate"], is_uri=False),
+                p = Term(type=IRI, iri=RDF_LABEL),
+                o = Term(type=LITERAL, value=rel["predicate"]),
             ))
-            
+
             # Handle object (entity vs literal)
             if rel.get("object-entity", True):
                 triples.append(Triple(
                     s = object_value,
-                    p = Value(value=RDF_LABEL, is_uri=True),
-                    o = Value(value=rel["object"], is_uri=True),
+                    p = Term(type=IRI, iri=RDF_LABEL),
+                    o = Term(type=LITERAL, value=rel["object"]),
                 ))
-            
+
             # Add the main relationship triple
             triples.append(Triple(
                 s = subject_value,
                 p = predicate_value,
                 o = object_value
             ))
-            
+
             # Add subject-of relationships to document
             if metadata.id:
                 triples.append(Triple(
                     s = subject_value,
-                    p = Value(value=SUBJECT_OF, is_uri=True),
-                    o = Value(value=metadata.id, is_uri=True),
+                    p = Term(type=IRI, iri=SUBJECT_OF),
+                    o = Term(type=IRI, iri=metadata.id),
                 ))
-                
+
                 triples.append(Triple(
                     s = predicate_value,
-                    p = Value(value=SUBJECT_OF, is_uri=True),
-                    o = Value(value=metadata.id, is_uri=True),
+                    p = Term(type=IRI, iri=SUBJECT_OF),
+                    o = Term(type=IRI, iri=metadata.id),
                 ))
-                
+
                 if rel.get("object-entity", True):
                     triples.append(Triple(
                         s = object_value,
-                        p = Value(value=SUBJECT_OF, is_uri=True),
-                        o = Value(value=metadata.id, is_uri=True),
+                        p = Term(type=IRI, iri=SUBJECT_OF),
+                        o = Term(type=IRI, iri=metadata.id),
                     ))
         
         return triples, entity_contexts

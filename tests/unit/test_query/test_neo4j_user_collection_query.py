@@ -6,7 +6,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from trustgraph.query.triples.neo4j.service import Processor
-from trustgraph.schema import TriplesQueryRequest, Value
+from trustgraph.schema import TriplesQueryRequest, Term, IRI, LITERAL
 
 
 class TestNeo4jQueryUserCollectionIsolation:
@@ -24,21 +24,23 @@ class TestNeo4jQueryUserCollectionIsolation:
         query = TriplesQueryRequest(
             user="test_user",
             collection="test_collection",
-            s=Value(value="http://example.com/s", is_uri=True),
-            p=Value(value="http://example.com/p", is_uri=True),
-            o=Value(value="test_object", is_uri=False)
+            s=Term(type=IRI, iri="http://example.com/s"),
+            p=Term(type=IRI, iri="http://example.com/p"),
+            o=Term(type=LITERAL, value="test_object"),
+            limit=10
         )
-        
+
         mock_driver.execute_query.return_value = ([], MagicMock(), MagicMock())
-        
+
         await processor.query_triples(query)
-        
+
         # Verify SPO query for literal includes user/collection
         expected_query = (
             "MATCH (src:Node {uri: $src, user: $user, collection: $collection})-"
             "[rel:Rel {uri: $rel, user: $user, collection: $collection}]->"
             "(dest:Literal {value: $value, user: $user, collection: $collection}) "
-            "RETURN $src as src"
+            "RETURN $src as src "
+            "LIMIT 10"
         )
         
         mock_driver.execute_query.assert_any_call(
@@ -63,23 +65,25 @@ class TestNeo4jQueryUserCollectionIsolation:
         query = TriplesQueryRequest(
             user="test_user",
             collection="test_collection",
-            s=Value(value="http://example.com/s", is_uri=True),
-            p=Value(value="http://example.com/p", is_uri=True),
-            o=None
+            s=Term(type=IRI, iri="http://example.com/s"),
+            p=Term(type=IRI, iri="http://example.com/p"),
+            o=None,
+            limit=10
         )
-        
+
         mock_driver.execute_query.return_value = ([], MagicMock(), MagicMock())
-        
+
         await processor.query_triples(query)
-        
+
         # Verify SP query for literals includes user/collection
         expected_literal_query = (
             "MATCH (src:Node {uri: $src, user: $user, collection: $collection})-"
             "[rel:Rel {uri: $rel, user: $user, collection: $collection}]->"
             "(dest:Literal {user: $user, collection: $collection}) "
-            "RETURN dest.value as dest"
+            "RETURN dest.value as dest "
+            "LIMIT 10"
         )
-        
+
         mock_driver.execute_query.assert_any_call(
             expected_literal_query,
             src="http://example.com/s",
@@ -88,13 +92,14 @@ class TestNeo4jQueryUserCollectionIsolation:
             collection="test_collection",
             database_='neo4j'
         )
-        
+
         # Verify SP query for nodes includes user/collection
         expected_node_query = (
             "MATCH (src:Node {uri: $src, user: $user, collection: $collection})-"
             "[rel:Rel {uri: $rel, user: $user, collection: $collection}]->"
             "(dest:Node {user: $user, collection: $collection}) "
-            "RETURN dest.uri as dest"
+            "RETURN dest.uri as dest "
+            "LIMIT 10"
         )
         
         mock_driver.execute_query.assert_any_call(
@@ -118,21 +123,23 @@ class TestNeo4jQueryUserCollectionIsolation:
         query = TriplesQueryRequest(
             user="test_user",
             collection="test_collection",
-            s=Value(value="http://example.com/s", is_uri=True),
+            s=Term(type=IRI, iri="http://example.com/s"),
             p=None,
-            o=Value(value="http://example.com/o", is_uri=True)
+            o=Term(type=IRI, iri="http://example.com/o"),
+            limit=10
         )
-        
+
         mock_driver.execute_query.return_value = ([], MagicMock(), MagicMock())
-        
+
         await processor.query_triples(query)
-        
+
         # Verify SO query for nodes includes user/collection
         expected_query = (
             "MATCH (src:Node {uri: $src, user: $user, collection: $collection})-"
             "[rel:Rel {user: $user, collection: $collection}]->"
             "(dest:Node {uri: $uri, user: $user, collection: $collection}) "
-            "RETURN rel.uri as rel"
+            "RETURN rel.uri as rel "
+            "LIMIT 10"
         )
         
         mock_driver.execute_query.assert_any_call(
@@ -156,23 +163,25 @@ class TestNeo4jQueryUserCollectionIsolation:
         query = TriplesQueryRequest(
             user="test_user",
             collection="test_collection",
-            s=Value(value="http://example.com/s", is_uri=True),
+            s=Term(type=IRI, iri="http://example.com/s"),
             p=None,
-            o=None
+            o=None,
+            limit=10
         )
-        
+
         mock_driver.execute_query.return_value = ([], MagicMock(), MagicMock())
-        
+
         await processor.query_triples(query)
-        
+
         # Verify S query includes user/collection
         expected_query = (
             "MATCH (src:Node {uri: $src, user: $user, collection: $collection})-"
             "[rel:Rel {user: $user, collection: $collection}]->"
             "(dest:Literal {user: $user, collection: $collection}) "
-            "RETURN rel.uri as rel, dest.value as dest"
+            "RETURN rel.uri as rel, dest.value as dest "
+            "LIMIT 10"
         )
-        
+
         mock_driver.execute_query.assert_any_call(
             expected_query,
             src="http://example.com/s",
@@ -194,20 +203,22 @@ class TestNeo4jQueryUserCollectionIsolation:
             user="test_user",
             collection="test_collection",
             s=None,
-            p=Value(value="http://example.com/p", is_uri=True),
-            o=Value(value="literal", is_uri=False)
+            p=Term(type=IRI, iri="http://example.com/p"),
+            o=Term(type=LITERAL, value="literal"),
+            limit=10
         )
-        
+
         mock_driver.execute_query.return_value = ([], MagicMock(), MagicMock())
-        
+
         await processor.query_triples(query)
-        
+
         # Verify PO query for literals includes user/collection
         expected_query = (
             "MATCH (src:Node {user: $user, collection: $collection})-"
             "[rel:Rel {uri: $uri, user: $user, collection: $collection}]->"
             "(dest:Literal {value: $value, user: $user, collection: $collection}) "
-            "RETURN src.uri as src"
+            "RETURN src.uri as src "
+            "LIMIT 10"
         )
         
         mock_driver.execute_query.assert_any_call(
@@ -232,20 +243,22 @@ class TestNeo4jQueryUserCollectionIsolation:
             user="test_user",
             collection="test_collection",
             s=None,
-            p=Value(value="http://example.com/p", is_uri=True),
-            o=None
+            p=Term(type=IRI, iri="http://example.com/p"),
+            o=None,
+            limit=10
         )
-        
+
         mock_driver.execute_query.return_value = ([], MagicMock(), MagicMock())
-        
+
         await processor.query_triples(query)
-        
+
         # Verify P query includes user/collection
         expected_query = (
             "MATCH (src:Node {user: $user, collection: $collection})-"
             "[rel:Rel {uri: $uri, user: $user, collection: $collection}]->"
             "(dest:Literal {user: $user, collection: $collection}) "
-            "RETURN src.uri as src, dest.value as dest"
+            "RETURN src.uri as src, dest.value as dest "
+            "LIMIT 10"
         )
         
         mock_driver.execute_query.assert_any_call(
@@ -270,19 +283,21 @@ class TestNeo4jQueryUserCollectionIsolation:
             collection="test_collection",
             s=None,
             p=None,
-            o=Value(value="test_value", is_uri=False)
+            o=Term(type=LITERAL, value="test_value"),
+            limit=10
         )
-        
+
         mock_driver.execute_query.return_value = ([], MagicMock(), MagicMock())
-        
+
         await processor.query_triples(query)
-        
+
         # Verify O query for literals includes user/collection
         expected_query = (
             "MATCH (src:Node {user: $user, collection: $collection})-"
             "[rel:Rel {user: $user, collection: $collection}]->"
             "(dest:Literal {value: $value, user: $user, collection: $collection}) "
-            "RETURN src.uri as src, rel.uri as rel"
+            "RETURN src.uri as src, rel.uri as rel "
+            "LIMIT 10"
         )
         
         mock_driver.execute_query.assert_any_call(
@@ -307,34 +322,37 @@ class TestNeo4jQueryUserCollectionIsolation:
             collection="test_collection",
             s=None,
             p=None,
-            o=None
+            o=None,
+            limit=10
         )
-        
+
         mock_driver.execute_query.return_value = ([], MagicMock(), MagicMock())
-        
+
         await processor.query_triples(query)
-        
+
         # Verify wildcard query for literals includes user/collection
         expected_literal_query = (
             "MATCH (src:Node {user: $user, collection: $collection})-"
             "[rel:Rel {user: $user, collection: $collection}]->"
             "(dest:Literal {user: $user, collection: $collection}) "
-            "RETURN src.uri as src, rel.uri as rel, dest.value as dest"
+            "RETURN src.uri as src, rel.uri as rel, dest.value as dest "
+            "LIMIT 10"
         )
-        
+
         mock_driver.execute_query.assert_any_call(
             expected_literal_query,
             user="test_user",
             collection="test_collection",
             database_='neo4j'
         )
-        
+
         # Verify wildcard query for nodes includes user/collection
         expected_node_query = (
             "MATCH (src:Node {user: $user, collection: $collection})-"
             "[rel:Rel {user: $user, collection: $collection}]->"
             "(dest:Node {user: $user, collection: $collection}) "
-            "RETURN src.uri as src, rel.uri as rel, dest.uri as dest"
+            "RETURN src.uri as src, rel.uri as rel, dest.uri as dest "
+            "LIMIT 10"
         )
         
         mock_driver.execute_query.assert_any_call(
@@ -355,9 +373,10 @@ class TestNeo4jQueryUserCollectionIsolation:
         
         # Query without user/collection fields
         query = TriplesQueryRequest(
-            s=Value(value="http://example.com/s", is_uri=True),
+            s=Term(type=IRI, iri="http://example.com/s"),
             p=None,
-            o=None
+            o=None,
+            limit=10
         )
         
         mock_driver.execute_query.return_value = ([], MagicMock(), MagicMock())
@@ -384,47 +403,48 @@ class TestNeo4jQueryUserCollectionIsolation:
         query = TriplesQueryRequest(
             user="test_user",
             collection="test_collection",
-            s=Value(value="http://example.com/s", is_uri=True),
+            s=Term(type=IRI, iri="http://example.com/s"),
             p=None,
-            o=None
+            o=None,
+            limit=10
         )
-        
+
         # Mock some results
         mock_record1 = MagicMock()
         mock_record1.data.return_value = {
             "rel": "http://example.com/p1",
             "dest": "literal_value"
         }
-        
+
         mock_record2 = MagicMock()
         mock_record2.data.return_value = {
             "rel": "http://example.com/p2",
             "dest": "http://example.com/o"
         }
-        
+
         # Return results for literal query, empty for node query
         mock_driver.execute_query.side_effect = [
             ([mock_record1], MagicMock(), MagicMock()),  # Literal query
             ([mock_record2], MagicMock(), MagicMock())   # Node query
         ]
-        
+
         result = await processor.query_triples(query)
         
         # Verify results are proper Triple objects
         assert len(result) == 2
         
         # First triple (literal object)
-        assert result[0].s.value == "http://example.com/s"
-        assert result[0].s.is_uri == True
-        assert result[0].p.value == "http://example.com/p1"
-        assert result[0].p.is_uri == True
+        assert result[0].s.iri == "http://example.com/s"
+        assert result[0].s.type == IRI
+        assert result[0].p.iri == "http://example.com/p1"
+        assert result[0].p.type == IRI
         assert result[0].o.value == "literal_value"
-        assert result[0].o.is_uri == False
-        
+        assert result[0].o.type == LITERAL
+
         # Second triple (URI object)
-        assert result[1].s.value == "http://example.com/s"
-        assert result[1].s.is_uri == True
-        assert result[1].p.value == "http://example.com/p2"
-        assert result[1].p.is_uri == True
-        assert result[1].o.value == "http://example.com/o"
-        assert result[1].o.is_uri == True
+        assert result[1].s.iri == "http://example.com/s"
+        assert result[1].s.type == IRI
+        assert result[1].p.iri == "http://example.com/p2"
+        assert result[1].p.type == IRI
+        assert result[1].o.iri == "http://example.com/o"
+        assert result[1].o.type == IRI
